@@ -1,0 +1,774 @@
+{
+  "params": [
+    {
+      "alpha": 1,
+      "minGRU_vs_GRU": "33%",
+      "minLSTM_vs_LSTM": "38%"
+    },
+    {
+      "alpha": 2,
+      "minGRU_vs_GRU": "22%",
+      "minLSTM_vs_LSTM": "25%"
+    },
+    {
+      "alpha": 3,
+      "minGRU_vs_GRU": "17%",
+      "minLSTM_vs_LSTM": "19%"
+    },
+    {
+      "alpha": 4,
+      "minGRU_vs_GRU": "13%",
+      "minLSTM_vs_LSTM": "15%"
+    }
+  ],
+  "copy": [
+    {
+      "model": "mingru",
+      "layers": 1,
+      "seed": 0,
+      "best_acc": 0.259765625,
+      "final_acc": 0.259765625,
+      "params": 76880
+    },
+    {
+      "model": "mingru",
+      "layers": 1,
+      "seed": 1,
+      "best_acc": 0.26025390625,
+      "final_acc": 0.2574462890625,
+      "params": 76880
+    },
+    {
+      "model": "mingru",
+      "layers": 1,
+      "seed": 2,
+      "best_acc": 0.2613525390625,
+      "final_acc": 0.2613525390625,
+      "params": 76880
+    },
+    {
+      "model": "mingru",
+      "layers": 2,
+      "seed": 0,
+      "best_acc": 0.388671875,
+      "final_acc": 0.388671875,
+      "params": 151568
+    },
+    {
+      "model": "mingru",
+      "layers": 2,
+      "seed": 1,
+      "best_acc": 0.4144287109375,
+      "final_acc": 0.4144287109375,
+      "params": 151568
+    },
+    {
+      "model": "mingru",
+      "layers": 2,
+      "seed": 2,
+      "best_acc": 0.3953857421875,
+      "final_acc": 0.3953857421875,
+      "params": 151568
+    },
+    {
+      "model": "mingru",
+      "layers": 3,
+      "seed": 0,
+      "best_acc": 0.4495849609375,
+      "final_acc": 0.4495849609375,
+      "params": 226256
+    },
+    {
+      "model": "mingru",
+      "layers": 3,
+      "seed": 1,
+      "best_acc": 0.4451904296875,
+      "final_acc": 0.4451904296875,
+      "params": 226256
+    },
+    {
+      "model": "mingru",
+      "layers": 3,
+      "seed": 2,
+      "best_acc": 0.4757080078125,
+      "final_acc": 0.4757080078125,
+      "params": 226256
+    },
+    {
+      "model": "minlstm",
+      "layers": 1,
+      "seed": 0,
+      "best_acc": 0.2574462890625,
+      "final_acc": 0.2574462890625,
+      "params": 101840
+    },
+    {
+      "model": "minlstm",
+      "layers": 1,
+      "seed": 1,
+      "best_acc": 0.2613525390625,
+      "final_acc": 0.2613525390625,
+      "params": 101840
+    },
+    {
+      "model": "minlstm",
+      "layers": 1,
+      "seed": 2,
+      "best_acc": 0.25927734375,
+      "final_acc": 0.25927734375,
+      "params": 101840
+    },
+    {
+      "model": "minlstm",
+      "layers": 2,
+      "seed": 0,
+      "best_acc": 0.3983154296875,
+      "final_acc": 0.3983154296875,
+      "params": 201488
+    },
+    {
+      "model": "minlstm",
+      "layers": 2,
+      "seed": 1,
+      "best_acc": 0.41943359375,
+      "final_acc": 0.41943359375,
+      "params": 201488
+    },
+    {
+      "model": "minlstm",
+      "layers": 2,
+      "seed": 2,
+      "best_acc": 0.4683837890625,
+      "final_acc": 0.4683837890625,
+      "params": 201488
+    },
+    {
+      "model": "minlstm",
+      "layers": 3,
+      "seed": 0,
+      "best_acc": 0.2977294921875,
+      "final_acc": 0.2977294921875,
+      "params": 301136
+    },
+    {
+      "model": "minlstm",
+      "layers": 3,
+      "seed": 1,
+      "best_acc": 0.3509521484375,
+      "final_acc": 0.3509521484375,
+      "params": 301136
+    },
+    {
+      "model": "minlstm",
+      "layers": 3,
+      "seed": 2,
+      "best_acc": 0.4368896484375,
+      "final_acc": 0.4368896484375,
+      "params": 301136
+    },
+    {
+      "model": "gru",
+      "layers": 1,
+      "seed": 0,
+      "best_acc": 0.1741943359375,
+      "final_acc": 0.1741943359375,
+      "params": 27280
+    },
+    {
+      "model": "gru",
+      "layers": 1,
+      "seed": 1,
+      "best_acc": 0.1822509765625,
+      "final_acc": 0.1822509765625,
+      "params": 27280
+    },
+    {
+      "model": "gru",
+      "layers": 1,
+      "seed": 2,
+      "best_acc": 0.185546875,
+      "final_acc": 0.185546875,
+      "params": 27280
+    },
+    {
+      "model": "gru",
+      "layers": 2,
+      "seed": 0,
+      "best_acc": 0.28955078125,
+      "final_acc": 0.28955078125,
+      "params": 52368
+    },
+    {
+      "model": "gru",
+      "layers": 2,
+      "seed": 1,
+      "best_acc": 0.289794921875,
+      "final_acc": 0.289794921875,
+      "params": 52368
+    },
+    {
+      "model": "gru",
+      "layers": 2,
+      "seed": 2,
+      "best_acc": 0.3616943359375,
+      "final_acc": 0.3616943359375,
+      "params": 52368
+    },
+    {
+      "model": "gru",
+      "layers": 3,
+      "seed": 0,
+      "best_acc": 0.423828125,
+      "final_acc": 0.423828125,
+      "params": 77456
+    },
+    {
+      "model": "gru",
+      "layers": 3,
+      "seed": 1,
+      "best_acc": 0.4100341796875,
+      "final_acc": 0.4100341796875,
+      "params": 77456
+    },
+    {
+      "model": "gru",
+      "layers": 3,
+      "seed": 2,
+      "best_acc": 0.42626953125,
+      "final_acc": 0.42626953125,
+      "params": 77456
+    },
+    {
+      "model": "lstm",
+      "layers": 1,
+      "seed": 0,
+      "best_acc": 0.0811767578125,
+      "final_acc": 0.0811767578125,
+      "params": 35600
+    },
+    {
+      "model": "lstm",
+      "layers": 1,
+      "seed": 1,
+      "best_acc": 0.0751953125,
+      "final_acc": 0.071044921875,
+      "params": 35600
+    },
+    {
+      "model": "lstm",
+      "layers": 1,
+      "seed": 2,
+      "best_acc": 0.0743408203125,
+      "final_acc": 0.07080078125,
+      "params": 35600
+    },
+    {
+      "model": "lstm",
+      "layers": 2,
+      "seed": 0,
+      "best_acc": 0.0751953125,
+      "final_acc": 0.0712890625,
+      "params": 69008
+    },
+    {
+      "model": "lstm",
+      "layers": 2,
+      "seed": 1,
+      "best_acc": 0.0758056640625,
+      "final_acc": 0.071533203125,
+      "params": 69008
+    },
+    {
+      "model": "lstm",
+      "layers": 2,
+      "seed": 2,
+      "best_acc": 0.0736083984375,
+      "final_acc": 0.067138671875,
+      "params": 69008
+    },
+    {
+      "model": "lstm",
+      "layers": 3,
+      "seed": 0,
+      "best_acc": 0.0736083984375,
+      "final_acc": 0.07080078125,
+      "params": 102416
+    },
+    {
+      "model": "lstm",
+      "layers": 3,
+      "seed": 1,
+      "best_acc": 0.0740966796875,
+      "final_acc": 0.070556640625,
+      "params": 102416
+    },
+    {
+      "model": "lstm",
+      "layers": 3,
+      "seed": 2,
+      "best_acc": 0.07373046875,
+      "final_acc": 0.07177734375,
+      "params": 102416
+    },
+    {
+      "model": "transformer",
+      "layers": 1,
+      "seed": 0,
+      "best_acc": 0.4033203125,
+      "final_acc": 0.4033203125,
+      "params": 68560
+    },
+    {
+      "model": "transformer",
+      "layers": 1,
+      "seed": 1,
+      "best_acc": 0.4183349609375,
+      "final_acc": 0.4183349609375,
+      "params": 68560
+    },
+    {
+      "model": "transformer",
+      "layers": 1,
+      "seed": 2,
+      "best_acc": 0.3992919921875,
+      "final_acc": 0.3968505859375,
+      "params": 68560
+    },
+    {
+      "model": "transformer",
+      "layers": 2,
+      "seed": 0,
+      "best_acc": 0.974609375,
+      "final_acc": 0.974609375,
+      "params": 118544
+    },
+    {
+      "model": "transformer",
+      "layers": 2,
+      "seed": 1,
+      "best_acc": 0.9825439453125,
+      "final_acc": 0.979736328125,
+      "params": 118544
+    },
+    {
+      "model": "transformer",
+      "layers": 2,
+      "seed": 2,
+      "best_acc": 0.984375,
+      "final_acc": 0.984375,
+      "params": 118544
+    },
+    {
+      "model": "transformer",
+      "layers": 3,
+      "seed": 0,
+      "best_acc": 0.999267578125,
+      "final_acc": 0.9984130859375,
+      "params": 168528
+    },
+    {
+      "model": "transformer",
+      "layers": 3,
+      "seed": 1,
+      "best_acc": 0.9993896484375,
+      "final_acc": 0.9993896484375,
+      "params": 168528
+    },
+    {
+      "model": "transformer",
+      "layers": 3,
+      "seed": 2,
+      "best_acc": 0.998779296875,
+      "final_acc": 0.997314453125,
+      "params": 168528
+    }
+  ],
+  "lm": {
+    "mingru": {
+      "best_val": 1.4951743185520172,
+      "best_step": 700,
+      "params": 6265793
+    },
+    "minlstm": {
+      "best_val": 1.5092190265655518,
+      "best_step": 700,
+      "params": 7152833
+    },
+    "gru": {
+      "best_val": 1.4617809712886811,
+      "best_step": 800,
+      "params": 6261185
+    },
+    "lstm": {
+      "best_val": 1.464708924293518,
+      "best_step": 650,
+      "params": 7148225
+    },
+    "transformer": {
+      "best_val": 1.49350563287735,
+      "best_step": 1600,
+      "params": 5472449
+    }
+  },
+  "bench": [
+    {
+      "model": "plain_gru",
+      "L": 128,
+      "ms": 202.4633728000481,
+      "mem_gb": 0.23836469650268555
+    },
+    {
+      "model": "plain_gru",
+      "L": 256,
+      "ms": 294.5871325999178,
+      "mem_gb": 0.41452741622924805
+    },
+    {
+      "model": "plain_gru",
+      "L": 512,
+      "ms": 687.5675260002026,
+      "mem_gb": 0.767829418182373
+    },
+    {
+      "model": "plain_gru",
+      "L": 1024,
+      "ms": 2256.975642999896,
+      "mem_gb": 1.474433422088623
+    },
+    {
+      "model": "plain_gru",
+      "L": 2048,
+      "ms": 8051.068251000107,
+      "mem_gb": 2.8881139755249023
+    },
+    {
+      "model": "plain_gru",
+      "L": 4096,
+      "ms": 29670.623118599906,
+      "mem_gb": 5.714285850524902
+    },
+    {
+      "model": "plain_lstm",
+      "L": 128,
+      "ms": 151.51990939993993,
+      "mem_gb": 0.26226282119750977
+    },
+    {
+      "model": "plain_lstm",
+      "L": 256,
+      "ms": 322.46635619994777,
+      "mem_gb": 0.46186304092407227
+    },
+    {
+      "model": "plain_lstm",
+      "L": 512,
+      "ms": 695.6490307999047,
+      "mem_gb": 0.8620400428771973
+    },
+    {
+      "model": "plain_lstm",
+      "L": 1024,
+      "ms": 2278.3768659999623,
+      "mem_gb": 1.6623940467834473
+    },
+    {
+      "model": "plain_lstm",
+      "L": 2048,
+      "ms": 8058.281642599832,
+      "mem_gb": 3.2635746002197266
+    },
+    {
+      "model": "plain_lstm",
+      "L": 4096,
+      "ms": 29769.622478999736,
+      "mem_gb": 6.464746475219727
+    },
+    {
+      "model": "mingru",
+      "L": 128,
+      "ms": 57.08087719976902,
+      "mem_gb": 0.859992504119873
+    },
+    {
+      "model": "mingru",
+      "L": 256,
+      "ms": 112.28184159990633,
+      "mem_gb": 1.65425443649292
+    },
+    {
+      "model": "mingru",
+      "L": 512,
+      "ms": 222.24629320007807,
+      "mem_gb": 3.24470853805542
+    },
+    {
+      "model": "mingru",
+      "L": 1024,
+      "ms": 442.1621523997601,
+      "mem_gb": 6.42561674118042
+    },
+    {
+      "model": "mingru",
+      "L": 2048,
+      "ms": 889.8713326001598,
+      "mem_gb": 12.78743314743042
+    },
+    {
+      "model": "mingru",
+      "L": 4096,
+      "ms": NaN,
+      "mem_gb": NaN
+    },
+    {
+      "model": "minlstm",
+      "L": 128,
+      "ms": 74.06215680020978,
+      "mem_gb": 1.0017247200012207
+    },
+    {
+      "model": "minlstm",
+      "L": 256,
+      "ms": 135.7459161998122,
+      "mem_gb": 1.9366116523742676
+    },
+    {
+      "model": "minlstm",
+      "L": 512,
+      "ms": 267.37294739978097,
+      "mem_gb": 3.8083157539367676
+    },
+    {
+      "model": "minlstm",
+      "L": 1024,
+      "ms": 533.3490484001231,
+      "mem_gb": 7.551723957061768
+    },
+    {
+      "model": "minlstm",
+      "L": 2048,
+      "ms": NaN,
+      "mem_gb": NaN
+    },
+    {
+      "model": "minlstm",
+      "L": 4096,
+      "ms": NaN,
+      "mem_gb": NaN
+    },
+    {
+      "model": "gru",
+      "L": 128,
+      "ms": 8.539486000154284,
+      "mem_gb": 0.21506738662719727
+    },
+    {
+      "model": "gru",
+      "L": 256,
+      "ms": 17.769791599857854,
+      "mem_gb": 0.35941553115844727
+    },
+    {
+      "model": "gru",
+      "L": 512,
+      "ms": 34.497624799769255,
+      "mem_gb": 0.6490883827209473
+    },
+    {
+      "model": "gru",
+      "L": 1024,
+      "ms": 65.95675780008605,
+      "mem_gb": 1.2284340858459473
+    },
+    {
+      "model": "gru",
+      "L": 2048,
+      "ms": 134.85809820012946,
+      "mem_gb": 2.3871254920959473
+    },
+    {
+      "model": "gru",
+      "L": 4096,
+      "ms": 279.47788719975506,
+      "mem_gb": 4.704735279083252
+    },
+    {
+      "model": "lstm",
+      "L": 128,
+      "ms": 14.270703399961349,
+      "mem_gb": 0.20417547225952148
+    },
+    {
+      "model": "lstm",
+      "L": 256,
+      "ms": 27.35620339990419,
+      "mem_gb": 0.3368048667907715
+    },
+    {
+      "model": "lstm",
+      "L": 512,
+      "ms": 50.820091599962325,
+      "mem_gb": 0.6030402183532715
+    },
+    {
+      "model": "lstm",
+      "L": 1024,
+      "ms": 101.33648560004076,
+      "mem_gb": 1.1355109214782715
+    },
+    {
+      "model": "lstm",
+      "L": 2048,
+      "ms": 202.50546440001926,
+      "mem_gb": 2.2004523277282715
+    },
+    {
+      "model": "lstm",
+      "L": 4096,
+      "ms": 423.10217960002774,
+      "mem_gb": 4.330562114715576
+    },
+    {
+      "model": "transformer",
+      "L": 128,
+      "ms": 19.013572200128692,
+      "mem_gb": 0.2788252830505371
+    },
+    {
+      "model": "transformer",
+      "L": 256,
+      "ms": 39.29025299985369,
+      "mem_gb": 0.4940972328186035
+    },
+    {
+      "model": "transformer",
+      "L": 512,
+      "ms": 91.17416420012887,
+      "mem_gb": 0.9138989448547363
+    },
+    {
+      "model": "transformer",
+      "L": 1024,
+      "ms": 243.0408886000805,
+      "mem_gb": 1.745689868927002
+    },
+    {
+      "model": "transformer",
+      "L": 2048,
+      "ms": 732.5721310000517,
+      "mem_gb": 3.409498691558838
+    },
+    {
+      "model": "transformer",
+      "L": 4096,
+      "ms": 2404.0090419999615,
+      "mem_gb": 6.7366623878479
+    }
+  ],
+  "table": [
+    {
+      "experiment": "Selective Copy, 1 layer(s)",
+      "model": "mingru",
+      "paper": "37.0 \u00b1 2.3",
+      "mine": "26.0 \u00b1 0.1",
+      "notes": ""
+    },
+    {
+      "experiment": "Selective Copy, 1 layer(s)",
+      "model": "minlstm",
+      "paper": "37.6 \u00b1 2.0",
+      "mine": "25.9 \u00b1 0.2",
+      "notes": ""
+    },
+    {
+      "experiment": "Selective Copy, 2 layer(s)",
+      "model": "mingru",
+      "paper": "96.8 \u00b1 3.2",
+      "mine": "39.9 \u00b1 1.3",
+      "notes": ""
+    },
+    {
+      "experiment": "Selective Copy, 2 layer(s)",
+      "model": "minlstm",
+      "paper": "85.7 \u00b1 5.8",
+      "mine": "42.9 \u00b1 3.6",
+      "notes": ""
+    },
+    {
+      "experiment": "Selective Copy, 3 layer(s)",
+      "model": "mingru",
+      "paper": "99.5 \u00b1 0.2",
+      "mine": "45.7 \u00b1 1.6",
+      "notes": ""
+    },
+    {
+      "experiment": "Selective Copy, 3 layer(s)",
+      "model": "minlstm",
+      "paper": "96.0 \u00b1 2.8",
+      "mine": "36.2 \u00b1 7.0",
+      "notes": ""
+    },
+    {
+      "experiment": "Shakespeare best val loss",
+      "model": "mingru",
+      "paper": "1.548 (best at step ~575)",
+      "mine": "1.495 (step 700)",
+      "notes": ""
+    },
+    {
+      "experiment": "Shakespeare best val loss",
+      "model": "minlstm",
+      "paper": "1.555 (step ~625)",
+      "mine": "1.509 (step 700)",
+      "notes": ""
+    },
+    {
+      "experiment": "Shakespeare best val loss",
+      "model": "transformer",
+      "paper": "1.547 (step ~2000)",
+      "mine": "1.494 (step 1600)",
+      "notes": ""
+    },
+    {
+      "experiment": "Training speedup, length 512",
+      "model": "minGRU vs GRU",
+      "paper": "175x",
+      "mine": "3x",
+      "notes": ""
+    },
+    {
+      "experiment": "Training speedup, length 512",
+      "model": "minLSTM vs LSTM",
+      "paper": "235x",
+      "mine": "3x",
+      "notes": ""
+    },
+    {
+      "experiment": "Training speedup, length 4096",
+      "model": "minGRU vs GRU",
+      "paper": "1324x",
+      "mine": "nanx",
+      "notes": ""
+    },
+    {
+      "experiment": "Training speedup, length 4096",
+      "model": "minLSTM vs LSTM",
+      "paper": "1361x",
+      "mine": "nanx",
+      "notes": ""
+    }
+  ],
+  "system_meta": {
+    "paper": {
+      "hardware": "NVIDIA A100 GPU Cluster",
+      "baseline": "PyTorch Sequential Loops (non-cuDNN)",
+      "copy_scale": "L=4096, 16 data tokens, 400,000 steps",
+      "lm_scale": "3 layers, d=384, 5,000 steps, batch=64"
+    },
+    "reproduction": {
+      "hardware": "Tesla T4",
+      "baseline": "PyTorch Sequential Loops & cuDNN Kernels",
+      "copy_scale": "L=256, 16 data tokens, 5000 steps, 3 seeds",
+      "lm_scale": "3 layers, d=384, 4000 steps, batch=64"
+    }
+  }
+}
