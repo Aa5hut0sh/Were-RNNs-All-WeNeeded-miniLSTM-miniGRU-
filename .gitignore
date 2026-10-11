@@ -22,6 +22,3 @@ input.txt
 Thumbs.db
 .vscode/
 .idea/
-
-# The paper is third-party; link it in the README instead (optional)
-2410.01201v3.pdf

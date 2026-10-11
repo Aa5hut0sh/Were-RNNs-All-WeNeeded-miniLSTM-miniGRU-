@@ -1,241 +1,312 @@
+
 import os
 import json
-import torch
+
 import numpy as np
 import pandas as pd
+import torch
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 import gradio as gr
+
 from minrnn_core import MinGRU, MinLSTM, build_model
 
-def load_results():
-    path = os.path.join(os.path.dirname(__file__), "assets", "results.json")
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+HERE = os.path.dirname(os.path.abspath(__file__))
+ASSETS = os.path.join(HERE, "assets")
 
+# The 65 characters of TinyShakespeare in sorted order. Used only if assets/vocab.json is missing.
+DEFAULT_CHARS = "\n !$&',-.3:;?" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "abcdefghijklmnopqrstuvwxyz"
+
+PAPER_HARDWARE = ("P100, T4 and Quadro 5000 GPUs with 16 GB (efficiency benchmark on a T4); "
+                  "Mamba and xLSTM baselines were run on A100 80 GB GPUs")
+
+_CACHE = {}
+
+
+# ---------------------------------------------------------------- small helpers
+def load_json(name, default=None):
+    path = os.path.join(ASSETS, name)
+    if not os.path.exists(path):
+        return default
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_results():
+    return load_json("results.json", {})
+
+
+def load_checkpoint(model, filename, what):
+    """Load weights strictly. A mismatch raises a visible error instead of silently using random weights."""
+    path = os.path.join(ASSETS, filename)
+    if not os.path.exists(path):
+        raise gr.Error(f"Missing {filename} in app/assets/. Export it from the notebook first.")
+    try:
+        model.load_state_dict(torch.load(path, map_location="cpu"))
+    except RuntimeError as e:
+        raise gr.Error(f"{what}: checkpoint does not match the model definition. {str(e)[:400]}")
+    model.eval()
+    return model
+
+
+# ---------------------------------------------------------------- tab 1: paper vs ours
 def load_system_meta():
-    res = load_results()
-    meta = res.get("system_meta", {})
-    paper = meta.get("paper", {})
-    ours = meta.get("reproduction", {})
-    
-    text = (
-        "### Experimental & Hardware Setup Comparison\n\n"
-        "| Specification | Original Paper (Feng et al., 2024) | Our Reproduction (Colab) |\n"
+    ours = load_results().get("system_meta", {}).get("reproduction", {})
+    return (
+        "### Setup comparison\n\n"
+        "| Specification | Original paper (Feng et al., 2024) | Our reproduction |\n"
         "|---|---|---|\n"
-        f"| **Hardware** | {paper.get('hardware', 'NVIDIA A100 GPU Cluster')} | {ours.get('hardware', 'Google Colab NVIDIA T4 GPU (16 GB)')} |\n"
-        f"| **Baselines** | {paper.get('baseline', 'PyTorch Sequential Loops')} | {ours.get('baseline', 'PyTorch Sequential Loops & cuDNN Kernels')} |\n"
-        f"| **Selective Copy** | {paper.get('copy_scale', 'L=4096, 16 tokens, 400k steps')} | {ours.get('copy_scale', 'L=256, 16 tokens, 5k steps, 3 seeds')} |\n"
-        f"| **Language Model** | {paper.get('lm_scale', '3 layers, d=384, 5k steps')} | {ours.get('lm_scale', '3 layers, d=384, 4k steps, batch=64')} |\n"
+        f"| Hardware | {PAPER_HARDWARE} | {ours.get('hardware', 'Colab GPU')} |\n"
+        f"| GRU and LSTM baselines | plain PyTorch loops | {ours.get('baseline', 'plain PyTorch loops and cuDNN')} |\n"
+        f"| Selective Copy | L=4096, 16 data tokens, 400k steps | {ours.get('copy_scale', 'see notebook')} |\n"
+        f"| Language model | 3 layers, d=384, 5k steps, batch 64 | {ours.get('lm_scale', 'see notebook')} |\n"
     )
-    return text
+
 
 def load_comparison_table():
-    res = load_results()
-    rows = res.get("table", [])
-    if not rows:
-        return pd.DataFrame()
-    return pd.DataFrame(rows)
+    rows = load_results().get("table", [])
+    return pd.DataFrame(rows) if rows else pd.DataFrame({"info": ["No results.json found in app/assets/"]})
 
+
+# ---------------------------------------------------------------- tab 2: benchmark
 def plot_benchmarks():
-    data = load_results()
-    df = pd.DataFrame(data.get("bench", []))
+    df = pd.DataFrame(load_results().get("bench", []))
     if df.empty:
         return None
-
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.2))
     for m in df["model"].unique():
-        sub = df[df["model"] == m]
+        sub = df[df["model"] == m].dropna(subset=["ms"])
+        if sub.empty:
+            continue
         axes[0].plot(sub["L"], sub["ms"], marker="o", label=m)
-        axes[2].plot(sub["L"], sub["mem_gb"], marker="o", label=m)
-    axes[0].set(xlabel="Sequence Length (L)", ylabel="Step Time (ms)", title="Runtime (Log Scale)")
+        if "mem_gb" in sub and sub["mem_gb"].notna().any():
+            axes[2].plot(sub["L"], sub["mem_gb"], marker="o", label=m)
+    axes[0].set(xlabel="Sequence length", ylabel="Step time (ms)", title="Training step time (log scale)")
     axes[0].set_yscale("log")
-
     for slow, fast in [("plain_gru", "mingru"), ("plain_lstm", "minlstm")]:
         s = df[df["model"] == slow].set_index("L")["ms"]
         f = df[df["model"] == fast].set_index("L")["ms"]
-        if not s.empty and not f.empty:
-            axes[1].plot(s.index, (s / f).values, marker="s", label=f"{slow} / {fast}")
-    axes[1].set(xlabel="Sequence Length (L)", ylabel="Speedup (x)", title="Parallel Scan Speedup")
-    axes[2].set(xlabel="Sequence Length (L)", ylabel="Peak Memory (GB)", title="Peak VRAM Allocation")
-
+        sp = (s / f).dropna()
+        if not sp.empty:
+            axes[1].plot(sp.index, sp.values, marker="s", label=f"{slow} / {fast}")
+    axes[1].set(xlabel="Sequence length", ylabel="Speedup (x)", title="Speedup over the loop-based RNN")
+    axes[2].set(xlabel="Sequence length", ylabel="Peak memory (GB)", title="Peak GPU memory")
     for ax in axes:
         ax.grid(True, linestyle="--", alpha=0.5)
         ax.legend(fontsize=8)
     plt.tight_layout()
     return fig
 
-def plot_lm_curves():
-    path = os.path.join(os.path.dirname(__file__), "assets", "lm_curves.json")
-    if not os.path.exists(path):
-        return None
-    with open(path, "r", encoding="utf-8") as f:
-        curves = json.load(f)
 
+# ---------------------------------------------------------------- tab 3: LM curves
+def plot_lm_curves():
+    curves = load_json("lm_curves.json")
+    if not curves:
+        return None
     fig, ax = plt.subplots(figsize=(8.5, 4.2))
     for name, hist in curves.items():
-        steps = [pt["step"] for pt in hist]
-        val = [pt["val_loss"] for pt in hist]
-        ax.plot(steps, val, label=name)
-    ax.axhline(1.548, color="r", linestyle=":", alpha=0.7, label="Paper minGRU Target (1.548)")
-    ax.set(xlabel="Optimization Step", ylabel="Validation Loss", title="TinyShakespeare LM Loss Dynamics")
+        ax.plot([p["step"] for p in hist], [p["val_loss"] for p in hist], label=name)
+    ax.axhline(1.548, color="r", linestyle=":", alpha=0.7, label="paper minGRU best (1.548)")
+    ax.set(xlabel="Step", ylabel="Validation loss", title="TinyShakespeare validation loss")
     ax.grid(True, linestyle="--", alpha=0.5)
     ax.legend()
     plt.tight_layout()
     return fig
 
-def run_selective_copy(seq_len, n_data):
-    torch.manual_seed(0)
-    L = int(seq_len)
-    n = int(n_data)
-    pos = torch.randperm(L - n)[:n].sort().values
-    vals = torch.randint(2, 16, (n,))
-    seq = torch.zeros(L, dtype=torch.long)
-    seq[pos] = vals
-    seq[L - n:] = 1
 
-    model = build_model("mingru", 16, 64, 3, task="copy", max_len=L)
-    ckpt = os.path.join(os.path.dirname(__file__), "assets", "mingru_copy_demo.pt")
-    if os.path.exists(ckpt):
-        model.load_state_dict(torch.load(ckpt, map_location="cpu"))
-    model.eval()
+# ---------------------------------------------------------------- tab 4: Selective Copy demo + gates
+def copy_cfg():
+    cfg = load_json("copy_demo_config.json", {}) or {}
+    return dict(L=cfg.get("L", 64), n_data=cfg.get("n_data", 8), layers=cfg.get("layers", 3),
+                d=cfg.get("d", 64), V=cfg.get("V", 16))
+
+
+def get_copy_model():
+    if "copy" not in _CACHE:
+        c = copy_cfg()
+        model = build_model("mingru", c["V"], c["d"], c["layers"], task="copy", max_len=c["L"])
+        _CACHE["copy"] = load_checkpoint(model, "mingru_copy_demo.pt", "Selective Copy demo")
+    return _CACHE["copy"]
+
+
+def make_copy_batch(B, L, n, V, gen):
+    """Same construction as the notebook: noise = 0, marker = 1, data tokens = 2..V-1."""
+    x = torch.zeros(B, L, dtype=torch.long)
+    pos = torch.rand(B, L - n, generator=gen).argsort(1)[:, :n].sort(1).values
+    vals = torch.randint(2, V, (B, n), generator=gen)
+    x.scatter_(1, pos, vals)
+    x[:, L - n:] = 1
+    return x, pos, vals
+
+
+def run_selective_copy(seed):
+    c = copy_cfg()
+    model = get_copy_model()
+    gen = torch.Generator().manual_seed(int(seed))
+    with torch.no_grad():
+        x, _, vals = make_copy_batch(1, c["L"], c["n_data"], c["V"], gen)
+        pred = model(x)[:, c["L"] - c["n_data"]:].argmax(-1)
+        xb, _, vb = make_copy_batch(200, c["L"], c["n_data"], c["V"], torch.Generator().manual_seed(12345))
+        pb = model(xb)[:, c["L"] - c["n_data"]:].argmax(-1)
+    ok = (pred[0] == vals[0])
+    marks = "  ".join("✓" if v else "✗" for v in ok.tolist())
+    tok_acc = (pb == vb).float().mean().item() * 100
+    exact = (pb == vb).all(1).float().mean().item() * 100
+    return (
+        f"Demo model: minGRU, {c['layers']} layers, trained on length {c['L']} with {c['n_data']} data tokens\n\n"
+        f"Target:     {vals[0].tolist()}\n"
+        f"Predicted:  {pred[0].tolist()}\n"
+        f"Match:      {marks}\n"
+        f"This example: {int(ok.sum())}/{c['n_data']} tokens correct\n\n"
+        f"Over 200 fixed random sequences: token accuracy {tok_acc:.1f}%, exact match {exact:.1f}%"
+    )
+
+
+def plot_gate_heatmap(seed, layer):
+    c = copy_cfg()
+    model = get_copy_model()
+    L, n = c["L"], c["n_data"]
+    layer_idx = int(min(max(int(layer), 1), c["layers"])) - 1
+    gen = torch.Generator().manual_seed(int(seed))
+    x_ids, pos, _ = make_copy_batch(1, L, n, c["V"], gen)
 
     with torch.no_grad():
-        logits = model(seq.unsqueeze(0))
-        preds = logits[0, L - n:].argmax(dim=-1)
+        x = model.emb(x_ids)
+        gates = None
+        for i, blk in enumerate(model.blocks):
+            if i == layer_idx:
+                _, gates = blk(x, return_gates=True)
+                break
+            x = blk(x)
+    z = gates["z"][0].cpu().numpy()                      # (L, hidden)
 
-    correct = (preds == vals).sum().item()
-    acc = (correct / n) * 100
-    details = f"Target Tokens:    {vals.tolist()}\nPredicted Tokens: {preds.tolist()}\nAccuracy:         {acc:.1f}% ({correct}/{n})"
-    return details
+    types = np.zeros(L)                                  # 0 noise, 1 output marker, 2 data
+    types[pos[0].numpy()] = 2
+    types[L - n:] = 1
+    zmean = z.mean(1)
 
-def plot_gate_heatmap(seq_len, n_data):
-    torch.manual_seed(7)
-    L = int(seq_len)
-    n = int(n_data)
-    pos = torch.randperm(L - n)[:n].sort().values
-    vals = torch.randint(2, 16, (n,))
-    seq = torch.zeros(L, dtype=torch.long)
-    seq[pos] = vals
-    seq[L - n:] = 1
-
-    model = build_model("mingru", 16, 64, 1, task="copy", max_len=L)
-    model.eval()
-    with torch.no_grad():
-        x = model.emb(seq.unsqueeze(0))
-        _, gates = model.blocks[0](x, return_gates=True)
-        z = gates["z"][0].cpu().numpy()
-
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 4.5), gridspec_kw={"height_ratios": [1, 3]})
-    token_types = np.zeros(L)
-    token_types[pos.numpy()] = 1.0
-    token_types[L - n:] = 0.5
-    ax1.imshow(token_types[np.newaxis, :], aspect="auto", cmap="Blues")
-    ax1.set_yticks([])
-    ax1.set_title("Input Sequence (Dark: Data Tokens, Grey: Delimiter, White: Noise)")
-
-    cax = ax2.imshow(z.T, aspect="auto", cmap="viridis", interpolation="nearest")
-    ax2.set(xlabel="Timestep (t)", ylabel="Hidden Unit Index", title="minGRU Update Gate z_t Activations")
-    fig.colorbar(cax, ax=ax2, orientation="horizontal", pad=0.25, label="Gate Value z")
-    plt.tight_layout()
+    fig, axes = plt.subplots(3, 1, figsize=(10, 6.5), sharex=True, constrained_layout=True,
+                             gridspec_kw={"height_ratios": [0.6, 3, 1.6]})
+    ax0, ax1, ax2 = axes
+    ax0.imshow(types[None, :], aspect="auto", cmap=ListedColormap(["#f1efe8", "#b4b2a9", "#185fa5"]), vmin=0, vmax=2)
+    ax0.set_yticks([])
+    ax0.set_title("Input tokens: white = noise, grey = output marker, blue = data")
+    im = ax1.imshow(z.T, aspect="auto", cmap="viridis", interpolation="nearest", vmin=0, vmax=1)
+    ax1.set(ylabel="Hidden unit", title=f"minGRU update gate z, layer {layer_idx + 1}")
+    ax2.plot(np.arange(L), zmean, color="#534ab7")
+    ax2.scatter(pos[0].numpy(), zmean[pos[0].numpy()], color="#185fa5", s=22, zorder=3, label="data token")
+    ax2.set(xlabel="Time step", ylabel="Mean z")
+    ax2.legend(fontsize=8)
+    ax2.grid(True, linestyle="--", alpha=0.5)
+    fig.colorbar(im, ax=list(axes), pad=0.01, fraction=0.04, label="gate value z")
     return fig
 
+
+# ---------------------------------------------------------------- tab 5: equivalence
 def run_equivalence(model_name, T, d, use_log):
     torch.manual_seed(42)
     cls = MinGRU if model_name == "minGRU" else MinLSTM
-    m = cls(int(d), int(d), use_log=use_log).double()
+    m = cls(int(d), int(d), use_log=bool(use_log)).double()
     x = torch.randn(1, int(T), int(d), dtype=torch.float64)
-    h_seq = m(x, parallel=False)
-    h_par = m(x, parallel=True)
+    with torch.no_grad():
+        h_seq = m(x, parallel=False)
+        h_par = m(x, parallel=True)
     diff = (h_seq - h_par).abs().max().item()
-    status = "PASS (Bit-level alignment)" if diff < 1e-8 else "FAIL"
-    return f"Model: {model_name} | T: {T} | d: {d} | Log-space: {use_log}\nMax Absolute Difference: {diff:.3e}\nStatus: {status}"
+    status = "PASS" if diff < 1e-8 else "FAIL"
+    return (f"Model: {model_name} | T = {int(T)} | d = {int(d)} | log-space variant: {bool(use_log)}\n"
+            f"Max absolute difference between sequential and parallel output: {diff:.2e}\n"
+            f"Status: {status} (float64, tolerance 1e-8)")
+
+
+# ---------------------------------------------------------------- tab 6: text generation
+def get_lm():
+    if "lm" not in _CACHE:
+        vocab = load_json("vocab.json", None)
+        chars = "".join(vocab) if isinstance(vocab, (list, str)) else DEFAULT_CHARS
+        cfg = load_json("lm_config.json", {}) or {}
+        d, layers = cfg.get("d", 384), cfg.get("layers", 3)
+        model = build_model("mingru", len(chars), d, layers, task="lm", max_len=512)
+        _CACHE["lm"] = (load_checkpoint(model, "mingru_lm_demo.pt", "Shakespeare model"), chars)
+    return _CACHE["lm"]
+
 
 def generate_text(prompt, length, temperature):
-    chars = " !$'(),-./0123456789:;?ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-    stoi = {c: i for i, c in enumerate(chars)}
-    itos = {i: c for i, c in enumerate(chars)}
-    idx = torch.tensor([[stoi.get(c, 0) for c in prompt]], dtype=torch.long)
-
-    ckpt = os.path.join(os.path.dirname(__file__), "assets", "mingru_lm_demo.pt")
-    d, layers = (384, 3) if os.path.exists(ckpt) else (128, 2)
-    model = build_model("mingru", len(chars), d, layers, task="lm", max_len=512)
-    if os.path.exists(ckpt):
-        try:
-            model.load_state_dict(torch.load(ckpt, map_location="cpu"))
-        except Exception:
-            pass
-    model.eval()
-
-    out = list(prompt)
-    curr = idx
+    model, chars = get_lm()
+    stoi = {ch: i for i, ch in enumerate(chars)}
+    ids = [stoi[ch] for ch in prompt if ch in stoi] or [stoi.get("\n", 0)]
+    cur = torch.tensor([ids], dtype=torch.long)
+    out = [chars[i] for i in ids]
+    temp = max(float(temperature), 0.1)
     with torch.no_grad():
         for _ in range(int(length)):
-            logits = model(curr)[:, -1, :] / max(float(temperature), 0.1)
-            probs = torch.softmax(logits, dim=-1)
-            next_idx = torch.multinomial(probs, num_samples=1)
-            out.append(itos.get(next_idx.item(), ""))
-            curr = torch.cat([curr, next_idx], dim=1)[:, -256:]
+            logits = model(cur[:, -256:])[:, -1, :] / temp
+            nxt = torch.multinomial(torch.softmax(logits, dim=-1), num_samples=1)
+            out.append(chars[nxt.item()])
+            cur = torch.cat([cur, nxt], dim=1)
     return "".join(out)
 
-with gr.Blocks(title="minGRU & minLSTM Explorer") as demo:
-    gr.Markdown("# Were RNNs All We Needed? (minGRU & minLSTM)")
-    gr.Markdown("Interactive visualizer exploring Feng et al. (2024), comparing original paper benchmarks with our Google Colab reproduction.")
 
-    with gr.Tab("1. Paper vs. Ours Comparison"):
+# ---------------------------------------------------------------- interface
+with gr.Blocks(title="minGRU and minLSTM explorer") as demo:
+    gr.Markdown("# Were RNNs All We Needed? minGRU and minLSTM")
+    gr.Markdown("Explorer for a small-scale reproduction of Feng et al. (2024). "
+                "All plots read results exported from the notebook.")
+
+    with gr.Tab("1. Paper vs ours"):
         gr.Markdown(load_system_meta())
-        gr.Markdown("### Experimental Results: Paper vs. Our Google Colab Reproduction")
         gr.Dataframe(value=load_comparison_table())
 
-    with gr.Tab("2. Speed & Memory Scaling"):
-        gr.Markdown("### Training Latency & VRAM Scaling (Colab T4 vs. Paper)")
-        gr.Markdown("Demonstrates the flat $O(\\log T)$ parallel scan scaling versus linear $O(T)$ loop RNN scaling across sequence lengths up to 4096.")
-        bench_plot = gr.Plot(value=plot_benchmarks())
+    with gr.Tab("2. Speed and memory"):
+        gr.Markdown("Time and memory for one training step (forward, loss, backward) against sequence length. "
+                    "Our model width differs from the paper's (the paper does not state its width), "
+                    "so compare the shapes of the curves rather than absolute numbers.")
+        gr.Plot(value=plot_benchmarks())
 
-    with gr.Tab("3. Training Curves"):
-        gr.Markdown("### TinyShakespeare Validation Loss Trajectories")
-        gr.Markdown("Highlights minGRU and minLSTM reaching the optimal loss target earlier in training compared to the Transformer baseline.")
-        lm_plot = gr.Plot(value=plot_lm_curves())
+    with gr.Tab("3. Training curves"):
+        gr.Markdown("Validation loss on TinyShakespeare. The dotted line is the paper's best minGRU loss.")
+        gr.Plot(value=plot_lm_curves())
 
-    with gr.Tab("4. Gate Heatmap & Copy Playground"):
-        gr.Markdown("### Input-Dependent Gating Dynamics")
-        gr.Markdown("Visualizes how minGRU's update gate $z_t$ remains closed on noise tokens and spikes exclusively on data tokens.")
+    with gr.Tab("4. Selective Copy and gates"):
+        cc = copy_cfg()
+        gr.Markdown(f"Demo model: minGRU, {cc['layers']} layers, length {cc['L']}, {cc['n_data']} data tokens. "
+                    "Layer 1's gate sees only the current token, so it is constant for each token type; "
+                    "later layers also see history. Compare the gate on noise tokens with the gate on data tokens.")
         with gr.Row():
-            gh_len = gr.Slider(32, 128, value=64, step=16, label="Sequence Length")
-            gh_data = gr.Slider(4, 16, value=8, step=2, label="Data Tokens")
-        gh_btn = gr.Button("Generate Gate Heatmap", variant="primary")
-        gh_plot = gr.Plot(value=plot_gate_heatmap(64, 8))
-        gh_btn.click(plot_gate_heatmap, [gh_len, gh_data], gh_plot)
+            seed_in = gr.Number(value=0, precision=0, label="Seed (changes the example)")
+            layer_in = gr.Slider(1, cc["layers"], value=min(2, cc["layers"]), step=1, label="Layer")
+        gh_btn = gr.Button("Show gate heatmap", variant="primary")
+        gh_plot = gr.Plot()
+        gh_btn.click(plot_gate_heatmap, [seed_in, layer_in], gh_plot)
+        sc_btn = gr.Button("Run Selective Copy example")
+        sc_out = gr.Textbox(label="Result", lines=9)
+        sc_btn.click(run_selective_copy, [seed_in], sc_out)
 
-        gr.Markdown("---")
-        gr.Markdown("### Selective Copy Retrieval Playground")
-        sc_btn = gr.Button("Test Demo Retrieval")
-        sc_out = gr.Textbox(label="Retrieval Results", lines=4)
-        sc_btn.click(run_selective_copy, [gh_len, gh_data], sc_out)
-
-    with gr.Tab("5. Equivalence Verification"):
-        gr.Markdown("### Numerical Equivalence Checker")
-        gr.Markdown("Validates that parallel prefix scan produces bit-level identical outputs to sequential recurrent stepping.")
+    with gr.Tab("5. Equivalence"):
+        gr.Markdown("Runs the same weights in sequential mode and in parallel-scan mode and compares the outputs "
+                    "(float64). They agree to rounding error, about 1e-14, not bit for bit.")
         with gr.Row():
             model_opt = gr.Radio(["minGRU", "minLSTM"], value="minGRU", label="Model")
-            log_opt = gr.Checkbox(value=True, label="Log-space Stabilization")
+            log_opt = gr.Checkbox(value=True, label="Log-space variant")
         with gr.Row():
-            t_slide = gr.Slider(8, 512, value=64, step=8, label="Sequence Length (T)")
-            d_slide = gr.Slider(4, 128, value=16, step=4, label="Hidden Dimension (d)")
-        eq_btn = gr.Button("Compute Numerical Equivalence")
+            t_slide = gr.Slider(8, 512, value=64, step=8, label="Sequence length T")
+            d_slide = gr.Slider(4, 128, value=16, step=4, label="Hidden size d")
+        eq_btn = gr.Button("Compare outputs")
         eq_out = gr.Textbox(label="Result", lines=4)
         eq_btn.click(run_equivalence, [model_opt, t_slide, d_slide, log_opt], eq_out)
 
-    with gr.Tab("6. Text Generation"):
-        gr.Markdown("### Autoregressive Character-Level Generation")
-        prompt_in = gr.Textbox(value="ROMEO: ", label="Prompt")
+    with gr.Tab("6. Text generation"):
+        gr.Markdown("Character-level minGRU trained on TinyShakespeare. Expect Shakespeare-like words and layout, "
+                    "not coherent sentences.")
+        prompt_in = gr.Textbox(value="ROMEO:\n", label="Prompt", lines=2)
         with gr.Row():
-            gen_len = gr.Slider(20, 200, value=80, step=10, label="Generation Length")
+            gen_len = gr.Slider(20, 400, value=200, step=10, label="Characters to generate")
             temp_slide = gr.Slider(0.2, 1.5, value=0.8, step=0.1, label="Temperature")
-        gen_btn = gr.Button("Generate Text")
-        gen_out = gr.Textbox(label="Generated Output", lines=6)
+        gen_btn = gr.Button("Generate")
+        gen_out = gr.Textbox(label="Output", lines=12)
         gen_btn.click(generate_text, [prompt_in, gen_len, temp_slide], gen_out)
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch()      # in Colab use demo.launch(share=True)
