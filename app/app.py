@@ -2,14 +2,12 @@
 import os
 import json
 
-import numpy as np
 import pandas as pd
 import torch
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
 import gradio as gr
 
 from minrnn_core import MinGRU, MinLSTM, build_model
@@ -17,7 +15,7 @@ from minrnn_core import MinGRU, MinLSTM, build_model
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(HERE, "assets")
 
-# The 65 characters of TinyShakespeare in sorted order. Used only if assets/vocab.json is missing.
+
 DEFAULT_CHARS = "\n !$&',-.3:;?" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "abcdefghijklmnopqrstuvwxyz"
 
 PAPER_HARDWARE = ("P100, T4 and Quadro 5000 GPUs with 16 GB (efficiency benchmark on a T4); "
@@ -26,7 +24,7 @@ PAPER_HARDWARE = ("P100, T4 and Quadro 5000 GPUs with 16 GB (efficiency benchmar
 _CACHE = {}
 
 
-# ---------------------------------------------------------------- small helpers
+# small helpers
 def load_json(name, default=None):
     path = os.path.join(ASSETS, name)
     if not os.path.exists(path):
@@ -52,7 +50,12 @@ def load_checkpoint(model, filename, what):
     return model
 
 
-# ---------------------------------------------------------------- tab 1: paper vs ours
+def image_path(name):
+    p = os.path.join(ASSETS, name)
+    return p if os.path.exists(p) else None
+
+
+# tab 1: paper vs ours
 def load_system_meta():
     ours = load_results().get("system_meta", {}).get("reproduction", {})
     return (
@@ -71,7 +74,7 @@ def load_comparison_table():
     return pd.DataFrame(rows) if rows else pd.DataFrame({"info": ["No results.json found in app/assets/"]})
 
 
-# ---------------------------------------------------------------- tab 2: benchmark
+# tab 2: benchmark
 def plot_benchmarks():
     df = pd.DataFrame(load_results().get("bench", []))
     if df.empty:
@@ -101,7 +104,7 @@ def plot_benchmarks():
     return fig
 
 
-# ---------------------------------------------------------------- tab 3: LM curves
+#  tab 3: LM curves
 def plot_lm_curves():
     curves = load_json("lm_curves.json")
     if not curves:
@@ -117,111 +120,108 @@ def plot_lm_curves():
     return fig
 
 
-# ---------------------------------------------------------------- tab 4: Selective Copy demo + gates
-def copy_cfg():
-    cfg = load_json("copy_demo_config.json", {}) or {}
-    return dict(L=cfg.get("L", 64), n_data=cfg.get("n_data", 8), layers=cfg.get("layers", 3),
-                d=cfg.get("d", 64), V=cfg.get("V", 16))
+#  tab 4: equivalence walkthrough
+MAX_ROWS = 16     # time steps shown in the tables (the error uses all of them)
+MAX_COLS = 6      # input features shown
 
 
-def get_copy_model():
-    if "copy" not in _CACHE:
-        c = copy_cfg()
-        model = build_model("mingru", c["V"], c["d"], c["layers"], task="copy", max_len=c["L"])
-        _CACHE["copy"] = load_checkpoint(model, "mingru_copy_demo.pt", "Selective Copy demo")
-    return _CACHE["copy"]
+def f4(v):
+    return f"{v:.4f}"
 
 
-def make_copy_batch(B, L, n, V, gen):
-    """Same construction as the notebook: noise = 0, marker = 1, data tokens = 2..V-1."""
-    x = torch.zeros(B, L, dtype=torch.long)
-    pos = torch.rand(B, L - n, generator=gen).argsort(1)[:, :n].sort(1).values
-    vals = torch.randint(2, V, (B, n), generator=gen)
-    x.scatter_(1, pos, vals)
-    x[:, L - n:] = 1
-    return x, pos, vals
+def md_table(head, rows):
+    out = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
+    out += ["| " + " | ".join(str(c) for c in r) + " |" for r in rows]
+    return "\n".join(out)
 
 
-def run_selective_copy(seed):
-    c = copy_cfg()
-    model = get_copy_model()
-    gen = torch.Generator().manual_seed(int(seed))
+def scan_rounds(a, b):
+    """Doubling scan for one hidden unit, recording (A, B) after every round.
+    a, b: 1-D tensors of length T. Pair rule: (a1,b1) o (a2,b2) = (a1*a2, a2*b1 + b2)."""
+    A, B = a.clone(), b.clone()
+    snaps = [(A.clone(), B.clone(), 0)]
+    d = 1
+    while d < len(a):
+        A2, B2 = A.clone(), B.clone()
+        A2[d:] = A[:-d] * A[d:]
+        B2[d:] = A[d:] * B[:-d] + B[d:]
+        A, B = A2, B2
+        snaps.append((A.clone(), B.clone(), d))
+        d *= 2
+    return snaps
+
+
+def run_equivalence(model_name, T, d, use_log, unit, seed):
+    T, d, seed = int(T), int(d), int(seed)
+    unit = min(max(int(unit), 1), d) - 1
+    is_lstm = model_name == "minLSTM"
+    torch.manual_seed(seed)
+    m = (MinLSTM if is_lstm else MinGRU)(d, d, use_log=bool(use_log)).double()
+    x = torch.randn(1, T, d, dtype=torch.float64)
     with torch.no_grad():
-        x, _, vals = make_copy_batch(1, c["L"], c["n_data"], c["V"], gen)
-        pred = model(x)[:, c["L"] - c["n_data"]:].argmax(-1)
-        xb, _, vb = make_copy_batch(200, c["L"], c["n_data"], c["V"], torch.Generator().manual_seed(12345))
-        pb = model(xb)[:, c["L"] - c["n_data"]:].argmax(-1)
-    ok = (pred[0] == vals[0])
-    marks = "  ".join("✓" if v else "✗" for v in ok.tolist())
-    tok_acc = (pb == vb).float().mean().item() * 100
-    exact = (pb == vb).all(1).float().mean().item() * 100
-    return (
-        f"Demo model: minGRU, {c['layers']} layers, trained on length {c['L']} with {c['n_data']} data tokens\n\n"
-        f"Target:     {vals[0].tolist()}\n"
-        f"Predicted:  {pred[0].tolist()}\n"
-        f"Match:      {marks}\n"
-        f"This example: {int(ok.sum())}/{c['n_data']} tokens correct\n\n"
-        f"Over 200 fixed random sequences: token accuracy {tok_acc:.1f}%, exact match {exact:.1f}%"
-    )
+        h_seq, gates = m(x, parallel=False, return_gates=True)      # expected: the loop
+        h_par = m(x, parallel=True)                                   # got: the scan
+    diff_all = (h_seq - h_par).abs().max().item()
+    status = "PASS" if diff_all < 1e-8 else "FAIL"
+
+    if is_lstm:
+        a, b = gates["f"][0, :, unit], gates["i"][0, :, unit] * gates["cand"][0, :, unit]
+    else:
+        a, b = 1.0 - gates["z"][0, :, unit], gates["z"][0, :, unit] * gates["cand"][0, :, unit]
+    snaps = scan_rounds(a, b)
+    rounds = len(snaps) - 1
+    hs, hp = h_seq[0, :, unit], h_par[0, :, unit]
+    R = min(T, MAX_ROWS)
+
+    summary = (f"### Result: {status}\n"
+               f"- Model **{model_name}**, T = {T}, d = {d}, log-space variant: **{bool(use_log)}**, seed {seed}\n"
+               f"- Max absolute difference between sequential and parallel over all {T} x {d} values: **{diff_all:.2e}**\n"
+               f"- Sequential needs **{T} steps in a row**; the scan needs **{rounds} rounds** (ceil(log2 {T}))\n"
+               f"- Differences near 1e-15 are floating-point rounding (float64); tolerance 1e-8")
+
+    cols = min(d, MAX_COLS)
+    inp = ("**1. Input** (random T x d matrix, first rows and columns)\n\n"
+           + md_table(["t"] + [f"x{k + 1}" for k in range(cols)],
+                      [[t + 1] + [f4(x[0, t, k].item()) for k in range(cols)] for t in range(R)]))
+
+    if is_lstm:
+        head = ["t", "f' (forget)", "i' (input)", "candidate", "a_t = f'", "b_t = i' * cand"]
+        rows = [[t + 1, f4(gates["f"][0, t, unit].item()), f4(gates["i"][0, t, unit].item()),
+                 f4(gates["cand"][0, t, unit].item()), f4(a[t].item()), f4(b[t].item())] for t in range(R)]
+    else:
+        head = ["t", "z (update gate)", "candidate", "a_t = 1 - z", "b_t = z * cand"]
+        rows = [[t + 1, f4(gates["z"][0, t, unit].item()), f4(gates["cand"][0, t, unit].item()),
+                 f4(a[t].item()), f4(b[t].item())] for t in range(R)]
+    gt = (f"**2. What the layer computes from the input** (hidden unit {unit + 1}). "
+          "No column uses the previous hidden state, so all rows are computed at once.\n\n" + md_table(head, rows))
+
+    prev = 0.0
+    rows = []
+    for t in range(R):
+        rows.append([t + 1, f4(prev), f"{f4(a[t].item())} x {f4(prev)} + {f4(b[t].item())}", f"**{f4(hs[t].item())}**"])
+        prev = hs[t].item()
+    sq = ("**3. Sequential way (the expected output).** One step after another: h_t = a_t * h_(t-1) + b_t, with h_0 = 0\n\n"
+          + md_table(["t", "h_(t-1)", "a_t * h_(t-1) + b_t", "h_t"], rows))
+
+    head = ["t", "start"] + [f"round {k} (join t-{snaps[k][2]})" for k in range(1, rounds + 1)]
+    rows = [[t + 1] + [f"B {f4(Bk[t].item())} / A {f4(Ak[t].item())}" for Ak, Bk, _ in snaps] for t in range(R)]
+    sc = ("**4. Parallel way (scan).** Each cell is a pair (A, B). In every round each row merges with the row d steps "
+          "above it, all rows at once. After the last round, B is h_t.\n\n" + md_table(head, rows))
+    if use_log:
+        sc += ("\n\nIn log-space mode the real parallel code works with logarithms. The table above runs the same scan "
+               "on the plain a_t and b_t (the same function). The 'got (parallel)' column below comes from the real log-space scan.")
+
+    final_B = snaps[-1][1]
+    head = ["t", "expected (sequential)", "got (parallel)", "got (rounds above)", "error"]
+    rows = [[t + 1, f4(hs[t].item()), f4(hp[t].item()), f4(final_B[t].item()), f"{abs(hs[t].item() - hp[t].item()):.1e}"]
+            for t in range(R)]
+    cmp_ = "**5. Expected vs got, and the error**\n\n" + md_table(head, rows)
+    if T > R:
+        cmp_ += f"\n\nTables show the first {R} of {T} time steps; the summary error covers all of them."
+    return summary, inp, gt, sq, sc, cmp_
 
 
-def plot_gate_heatmap(seed, layer):
-    c = copy_cfg()
-    model = get_copy_model()
-    L, n = c["L"], c["n_data"]
-    layer_idx = int(min(max(int(layer), 1), c["layers"])) - 1
-    gen = torch.Generator().manual_seed(int(seed))
-    x_ids, pos, _ = make_copy_batch(1, L, n, c["V"], gen)
-
-    with torch.no_grad():
-        x = model.emb(x_ids)
-        gates = None
-        for i, blk in enumerate(model.blocks):
-            if i == layer_idx:
-                _, gates = blk(x, return_gates=True)
-                break
-            x = blk(x)
-    z = gates["z"][0].cpu().numpy()                      # (L, hidden)
-
-    types = np.zeros(L)                                  # 0 noise, 1 output marker, 2 data
-    types[pos[0].numpy()] = 2
-    types[L - n:] = 1
-    zmean = z.mean(1)
-
-    fig, axes = plt.subplots(3, 1, figsize=(10, 6.5), sharex=True, constrained_layout=True,
-                             gridspec_kw={"height_ratios": [0.6, 3, 1.6]})
-    ax0, ax1, ax2 = axes
-    ax0.imshow(types[None, :], aspect="auto", cmap=ListedColormap(["#f1efe8", "#b4b2a9", "#185fa5"]), vmin=0, vmax=2)
-    ax0.set_yticks([])
-    ax0.set_title("Input tokens: white = noise, grey = output marker, blue = data")
-    im = ax1.imshow(z.T, aspect="auto", cmap="viridis", interpolation="nearest", vmin=0, vmax=1)
-    ax1.set(ylabel="Hidden unit", title=f"minGRU update gate z, layer {layer_idx + 1}")
-    ax2.plot(np.arange(L), zmean, color="#534ab7")
-    ax2.scatter(pos[0].numpy(), zmean[pos[0].numpy()], color="#185fa5", s=22, zorder=3, label="data token")
-    ax2.set(xlabel="Time step", ylabel="Mean z")
-    ax2.legend(fontsize=8)
-    ax2.grid(True, linestyle="--", alpha=0.5)
-    fig.colorbar(im, ax=list(axes), pad=0.01, fraction=0.04, label="gate value z")
-    return fig
-
-
-# ---------------------------------------------------------------- tab 5: equivalence
-def run_equivalence(model_name, T, d, use_log):
-    torch.manual_seed(42)
-    cls = MinGRU if model_name == "minGRU" else MinLSTM
-    m = cls(int(d), int(d), use_log=bool(use_log)).double()
-    x = torch.randn(1, int(T), int(d), dtype=torch.float64)
-    with torch.no_grad():
-        h_seq = m(x, parallel=False)
-        h_par = m(x, parallel=True)
-    diff = (h_seq - h_par).abs().max().item()
-    status = "PASS" if diff < 1e-8 else "FAIL"
-    return (f"Model: {model_name} | T = {int(T)} | d = {int(d)} | log-space variant: {bool(use_log)}\n"
-            f"Max absolute difference between sequential and parallel output: {diff:.2e}\n"
-            f"Status: {status} (float64, tolerance 1e-8)")
-
-
-# ---------------------------------------------------------------- tab 6: text generation
+# tab 6: text generation
 def get_lm():
     if "lm" not in _CACHE:
         vocab = load_json("vocab.json", None)
@@ -263,41 +263,40 @@ with gr.Blocks(title="minGRU and minLSTM explorer") as demo:
         gr.Markdown("Time and memory for one training step (forward, loss, backward) against sequence length. "
                     "Our model width differs from the paper's (the paper does not state its width), "
                     "so compare the shapes of the curves rather than absolute numbers.")
-        gr.Plot(value=plot_benchmarks())
+        gr.Image(value=image_path("benchmark.png"), label="Paper's result (Feng et al., 2024, efficiency figure)",
+                 interactive=False)
+        gr.Plot(value=plot_benchmarks(), label="Our result (live plot from results.json)")
 
     with gr.Tab("3. Training curves"):
-        gr.Markdown("Validation loss on TinyShakespeare. The dotted line is the paper's best minGRU loss.")
-        gr.Plot(value=plot_lm_curves())
+        gr.Markdown("Validation loss on TinyShakespeare. First the paper's figure, then ours. "
+                    "The dotted line in our plot is the paper's best minGRU loss.")
+        gr.Image(value=image_path("Shakespeare.png"), label="Paper's result (Feng et al., 2024, Shakespeare training curves)",
+                 interactive=False)
+        gr.Plot(value=plot_lm_curves(), label="Our result (live plot from lm_curves.json)")
 
-    with gr.Tab("4. Selective Copy and gates"):
-        cc = copy_cfg()
-        gr.Markdown(f"Demo model: minGRU, {cc['layers']} layers, length {cc['L']}, {cc['n_data']} data tokens. "
-                    "Layer 1's gate sees only the current token, so it is constant for each token type; "
-                    "later layers also see history. Compare the gate on noise tokens with the gate on data tokens.")
-        with gr.Row():
-            seed_in = gr.Number(value=0, precision=0, label="Seed (changes the example)")
-            layer_in = gr.Slider(1, cc["layers"], value=min(2, cc["layers"]), step=1, label="Layer")
-        gh_btn = gr.Button("Show gate heatmap", variant="primary")
-        gh_plot = gr.Plot()
-        gh_btn.click(plot_gate_heatmap, [seed_in, layer_in], gh_plot)
-        sc_btn = gr.Button("Run Selective Copy example")
-        sc_out = gr.Textbox(label="Result", lines=9)
-        sc_btn.click(run_selective_copy, [seed_in], sc_out)
-
-    with gr.Tab("5. Equivalence"):
-        gr.Markdown("Runs the same weights in sequential mode and in parallel-scan mode and compares the outputs "
-                    "(float64). They agree to rounding error, about 1e-14, not bit for bit.")
+    with gr.Tab("4. Equivalence"):
+        gr.Markdown("Pick a model, sequence length and hidden size. The same weights and the same input are run "
+                    "sequentially (expected) and with the parallel scan (got), and the two are compared step by step.")
         with gr.Row():
             model_opt = gr.Radio(["minGRU", "minLSTM"], value="minGRU", label="Model")
-            log_opt = gr.Checkbox(value=True, label="Log-space variant")
+            log_opt = gr.Checkbox(value=False, label="Log-space variant")
         with gr.Row():
-            t_slide = gr.Slider(8, 512, value=64, step=8, label="Sequence length T")
-            d_slide = gr.Slider(4, 128, value=16, step=4, label="Hidden size d")
-        eq_btn = gr.Button("Compare outputs")
-        eq_out = gr.Textbox(label="Result", lines=4)
-        eq_btn.click(run_equivalence, [model_opt, t_slide, d_slide, log_opt], eq_out)
+            t_in = gr.Slider(2, 512, value=8, step=1, label="Sequence length T")
+            d_in = gr.Slider(1, 64, value=3, step=1, label="Hidden size d")
+        with gr.Row():
+            unit_in = gr.Slider(1, 64, value=1, step=1, label="Hidden unit to inspect")
+            seed_in = gr.Number(value=0, precision=0, label="Seed")
+        eq_btn = gr.Button("Run comparison", variant="primary")
+        eq_sum = gr.Markdown()
+        eq_inp = gr.Markdown()
+        eq_gate = gr.Markdown()
+        eq_seq = gr.Markdown()
+        eq_scan = gr.Markdown()
+        eq_cmp = gr.Markdown()
+        eq_btn.click(run_equivalence, [model_opt, t_in, d_in, log_opt, unit_in, seed_in],
+                     [eq_sum, eq_inp, eq_gate, eq_seq, eq_scan, eq_cmp])
 
-    with gr.Tab("6. Text generation"):
+    with gr.Tab("5. Text generation"):
         gr.Markdown("Character-level minGRU trained on TinyShakespeare. Expect Shakespeare-like words and layout, "
                     "not coherent sentences.")
         prompt_in = gr.Textbox(value="ROMEO:\n", label="Prompt", lines=2)
@@ -309,4 +308,4 @@ with gr.Blocks(title="minGRU and minLSTM explorer") as demo:
         gen_btn.click(generate_text, [prompt_in, gen_len, temp_slide], gen_out)
 
 if __name__ == "__main__":
-    demo.launch()      # in Colab use demo.launch(share=True)
+    demo.launch()      
